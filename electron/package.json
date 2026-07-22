@@ -1,0 +1,26 @@
+{
+  "name": "nekoai-electron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Electron desktop shell and floating pet for NekoAI.",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "keywords": [
+    "nekoai",
+    "electron",
+    "desktop-companion",
+    "virtual-pet"
+  ],
+  "author": "Rishika Solanki",
+  "license": "ISC",
+  "dependencies": {
+    "electron-store": "^11.0.2"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0"
+  }
+}

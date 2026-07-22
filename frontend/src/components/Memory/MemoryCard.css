@@ -1,0 +1,75 @@
+.memory-card {
+    background: #20252d;
+
+    border: 1px solid #2d333b;
+    border-radius: 18px;
+
+    padding: 20px;
+    margin-bottom: 18px;
+
+    color: #ffffff;
+
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+
+    transition: all 0.25s ease;
+}
+
+.memory-card:hover {
+    transform: translateY(-3px);
+
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.memory-card h3 {
+    margin: 0 0 10px;
+
+    color: #ffffff;
+
+    font-size: 1.1rem;
+}
+
+.memory-card p {
+    margin: 8px 0;
+
+    color: #cfd8dc;
+
+    line-height: 1.6;
+}
+
+.memory-card small {
+    display: inline-block;
+
+    margin-top: 12px;
+
+    color: #8f9aa7;
+}
+
+.memory-card button {
+    margin-top: 18px;
+
+    padding: 10px 16px;
+
+    border: none;
+    border-radius: 10px;
+
+    background: #ef4444;
+
+    color: white;
+
+    font-size: 0.9rem;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+}
+
+.memory-card button:hover {
+    background: #dc2626;
+
+    transform: translateY(-2px);
+}
+
+.memory-card button:active {
+    transform: scale(0.98);
+}

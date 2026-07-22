@@ -1,0 +1,29 @@
+.memory-list {
+    display: flex;
+    flex-direction: column;
+
+    gap: 18px;
+}
+
+.empty-memory {
+    margin: 20px 0 8px;
+
+    text-align: center;
+
+    color: #9ca3af;
+
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.memory-list small {
+    display: block;
+
+    text-align: center;
+
+    color: #6b7280;
+
+    font-size: 0.9rem;
+
+    line-height: 1.5;
+}

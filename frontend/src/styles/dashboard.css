@@ -1,0 +1,121 @@
+.dashboard{
+
+    padding:30px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:25px;
+
+    background:#0f172a;
+
+    min-height:100vh;
+
+    color:white;
+
+}
+
+.greeting-card{
+
+    background:#1e293b;
+
+    border-radius:18px;
+
+    padding:25px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.3);
+
+}
+
+.greeting-card h1{
+
+    margin:0;
+
+    font-size:32px;
+
+}
+
+.greeting-card p{
+
+    color:#cbd5e1;
+
+    margin-top:10px;
+
+}
+
+.stats-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+
+    gap:20px;
+
+}
+
+.stats-card{
+
+    background:#1e293b;
+
+    border-radius:18px;
+
+    padding:25px;
+
+    transition:.3s;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.25);
+
+}
+
+.stats-card:hover{
+
+    transform:translateY(-6px);
+
+}
+
+.stats-card .icon{
+
+    font-size:34px;
+
+    margin-bottom:10px;
+
+}
+
+.stats-card h3{
+
+    color:#94a3b8;
+
+    margin-bottom:10px;
+
+}
+
+.stats-card h2{
+
+    font-size:34px;
+
+}
+
+.insight-card{
+
+    background:#312e81;
+
+    padding:25px;
+
+    border-radius:18px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.25);
+
+}
+
+.insight-card h2{
+
+    margin-bottom:15px;
+
+}
+
+.insight-card p{
+
+    line-height:1.8;
+
+}
