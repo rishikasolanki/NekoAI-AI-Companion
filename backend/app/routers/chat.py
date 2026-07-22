@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-
+from google import genai
+import os
 from app.ai.ai_service import generate_response
 from app.ai.prompt_builder import build_prompt
 from app.database.database import get_db
@@ -20,6 +21,18 @@ router = APIRouter(
     prefix="/chat",
     tags=["AI Chat"],
 )
+
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+@router.post("/")
+async def chat_endpoint(payload: dict):
+    user_text = payload.get("text", "")
+    response = client.models.generate_content(
+        model=os.getenv("GEMINI_MODEL"),
+        contents=user_text
+    )
+    return {"reply": response.text}
 
 
 class ChatRequest(BaseModel):
@@ -145,3 +158,7 @@ def chat_history(
         db,
         limit=100,
     )
+
+@router.get("/chat")
+def test_chat():
+    return {"reply": "Chat endpoint working!"}

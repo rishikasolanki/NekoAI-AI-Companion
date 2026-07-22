@@ -1,0 +1,11 @@
+/* MainLayout.css */
+.main-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.main-layout .content {
+  flex: 1;
+  padding: 20px;
+}

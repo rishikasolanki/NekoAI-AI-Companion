@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +13,7 @@ from app.routers.ai_chat import router as brain_router
 from app.routers.analytics import router as analytics_router
 from app.routers.auth import router as auth_router
 from app.routers.chat import router as chat_router
+app.include_router(chat_router)
 from app.routers.decision import router as decision_router
 from app.routers.emotion import router as emotion_router
 from app.routers.habit import router as habit_router
@@ -29,7 +33,6 @@ app = FastAPI(
 
 
 # Create missing SQLite tables during development.
-# This does not update columns in existing tables.
 Base.metadata.create_all(bind=engine)
 
 
@@ -76,11 +79,15 @@ def home():
     tags=["Development"],
     summary="Test task statistics",
 )
+
 def test_tasks():
     db = SessionLocal()
 
     try:
         return get_task_statistics(db)
-
     finally:
         db.close()
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
