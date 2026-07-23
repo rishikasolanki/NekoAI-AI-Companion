@@ -1,29 +1,35 @@
 .memory-list {
-    display: flex;
-    flex-direction: column;
-
-    gap: 18px;
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(290px, 1fr)
+  );
+  gap: 16px;
 }
 
-.empty-memory {
-    margin: 20px 0 8px;
-
-    text-align: center;
-
-    color: #9ca3af;
-
-    font-size: 1rem;
-    font-weight: 600;
+.memory-list-state {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 30px;
+  color: #8fa0ba;
+  text-align: center;
+  background: #151f33;
+  border: 1px dashed #31425e;
+  border-radius: 17px;
 }
 
-.memory-list small {
-    display: block;
+.memory-list-state span {
+  font-size: 45px;
+}
 
-    text-align: center;
+.memory-list-state h3 {
+  margin: 12px 0 5px;
+  color: #f8fafc;
+}
 
-    color: #6b7280;
-
-    font-size: 0.9rem;
-
-    line-height: 1.5;
+.memory-list-state p {
+  max-width: 450px;
+  margin: 0;
+  line-height: 1.6;
 }

@@ -1,24 +1,25 @@
-import { useState } from "react";
+import {
+  createContext,
+  useMemo,
+  useState,
+} from "react";
 
-import { EmotionContext } from "./emotionContext";
+export const EmotionContext = createContext(null);
 
 export function EmotionProvider({ children }) {
+  const [emotion, setEmotion] = useState("idle");
 
-    const [emotion, setEmotion] = useState("idle");
+  const value = useMemo(
+    () => ({
+      emotion,
+      setEmotion,
+    }),
+    [emotion]
+  );
 
-    return (
-
-        <EmotionContext.Provider
-            value={{
-                emotion,
-                setEmotion
-            }}
-        >
-
-            {children}
-
-        </EmotionContext.Provider>
-
-    );
-
+  return (
+    <EmotionContext.Provider value={value}>
+      {children}
+    </EmotionContext.Provider>
+  );
 }

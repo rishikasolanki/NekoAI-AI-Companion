@@ -1,19 +1,20 @@
 from dotenv import load_dotenv
 
+# Load environment variables before importing routers/services.
 load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.database import Base, SessionLocal, engine
 
-# Import models so SQLAlchemy registers every table
-import app.models
+# Import models without overwriting the FastAPI variable named "app".
+from app import models as database_models  # noqa: F401
 
 from app.routers.ai_chat import router as brain_router
 from app.routers.analytics import router as analytics_router
 from app.routers.auth import router as auth_router
 from app.routers.chat import router as chat_router
-app.include_router(chat_router)
 from app.routers.decision import router as decision_router
 from app.routers.emotion import router as emotion_router
 from app.routers.habit import router as habit_router
@@ -23,7 +24,7 @@ from app.routers.task import router as task_router
 from app.routers.websocket import router as websocket_router
 
 from app.services.decision_database import get_task_statistics
-
+from app.models.habit import Habit, HabitCompletion
 
 app = FastAPI(
     title="NekoAI Backend",
@@ -32,7 +33,7 @@ app = FastAPI(
 )
 
 
-# Create missing SQLite tables during development.
+# Create missing database tables during development.
 Base.metadata.create_all(bind=engine)
 
 
@@ -48,6 +49,7 @@ app.add_middleware(
 )
 
 
+# Register every router exactly once.
 app.include_router(auth_router)
 app.include_router(task_router)
 app.include_router(emotion_router)
@@ -79,7 +81,6 @@ def home():
     tags=["Development"],
     summary="Test task statistics",
 )
-
 def test_tasks():
     db = SessionLocal()
 
@@ -87,7 +88,3 @@ def test_tasks():
         return get_task_statistics(db)
     finally:
         db.close()
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}

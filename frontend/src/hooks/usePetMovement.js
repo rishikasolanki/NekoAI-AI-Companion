@@ -1,50 +1,116 @@
-import { useState, useEffect } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+const WALK_SPEED = 2;
+const WALK_INTERVAL = 45;
 
 export default function usePetMovement() {
+  const [direction, setDirection] =
+    useState(1);
 
-    const [position, setPosition] = useState({
-        x: 100,
-        y: 100
-    });
+  const [isWalking, setIsWalking] =
+    useState(true);
 
-    const [direction, setDirection] = useState(1);
+  const walkTimerRef = useRef(null);
+  const behaviourTimerRef = useRef(null);
+  const pauseTimerRef = useRef(null);
+  const movingRef = useRef(false);
 
-    const [isDragging, setIsDragging] = useState(false);
+  useEffect(() => {
+    if (
+      !window.electronAPI?.movePetBy ||
+      !isWalking
+    ) {
+      return undefined;
+    }
 
-    useEffect(() => {
+    walkTimerRef.current =
+      window.setInterval(async () => {
+        if (movingRef.current) {
+          return;
+        }
 
-        if (isDragging) return;
+        movingRef.current = true;
 
-        const interval = setInterval(() => {
+        try {
+          const result =
+            await window.electronAPI.movePetBy(
+              direction * WALK_SPEED,
+              0
+            );
 
-            setPosition(prev => {
+          if (
+            result?.hitLeft ||
+            result?.hitRight
+          ) {
+            setDirection((current) =>
+              current === 1 ? -1 : 1
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Pet movement failed:",
+            error
+          );
+        } finally {
+          movingRef.current = false;
+        }
+      }, WALK_INTERVAL);
 
-                let newX = prev.x + direction * 4;
-
-                if (newX > window.innerWidth - 180)
-                    setDirection(-1);
-
-                if (newX < 0)
-                    setDirection(1);
-
-                return {
-                    ...prev,
-                    x: newX
-                };
-
-            });
-
-        }, 30);
-
-        return () => clearInterval(interval);
-
-    }, [direction, isDragging]);
-
-    return {
-        position,
-        setPosition,
-        isDragging,
-        setIsDragging
+    return () => {
+      window.clearInterval(
+        walkTimerRef.current
+      );
     };
+  }, [direction, isWalking]);
 
+  useEffect(() => {
+    behaviourTimerRef.current =
+      window.setInterval(() => {
+        const random = Math.random();
+
+        if (random < 0.3) {
+          setIsWalking(false);
+
+          window.clearTimeout(
+            pauseTimerRef.current
+          );
+
+          pauseTimerRef.current =
+            window.setTimeout(() => {
+              setIsWalking(true);
+            }, 1800 + Math.random() * 2800);
+        } else if (random < 0.58) {
+          setDirection((current) =>
+            current === 1 ? -1 : 1
+          );
+        }
+      }, 5000);
+
+    return () => {
+      window.clearInterval(
+        behaviourTimerRef.current
+      );
+
+      window.clearTimeout(
+        pauseTimerRef.current
+      );
+    };
+  }, []);
+
+  function turnAround() {
+    setDirection((current) =>
+      current === 1 ? -1 : 1
+    );
+  }
+
+  return {
+    direction,
+    isWalking,
+    setIsWalking,
+    turnAround,
+  };
 }

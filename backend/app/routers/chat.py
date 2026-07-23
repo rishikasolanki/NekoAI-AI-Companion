@@ -1,38 +1,28 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from google import genai
-import os
+
 from app.ai.ai_service import generate_response
 from app.ai.prompt_builder import build_prompt
 from app.database.database import get_db
 from app.models.chat_message import ChatMessage
+
 from app.services.decision_database import (
     format_task_summary,
     get_task_statistics,
 )
+
 from app.services.memory_service import (
     auto_save_memory,
     format_memories,
     get_recent_memories,
 )
 
+
 router = APIRouter(
     prefix="/chat",
     tags=["AI Chat"],
 )
-
-
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-@router.post("/")
-async def chat_endpoint(payload: dict):
-    user_text = payload.get("text", "")
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL"),
-        contents=user_text
-    )
-    return {"reply": response.text}
 
 
 class ChatRequest(BaseModel):
@@ -44,10 +34,10 @@ class ChatRequest(BaseModel):
 
 def _recent_history(
     db: Session,
-    limit: int = 20,
-) -> list[dict[str, str]]:
+    limit: int = 100,
+) -> list[dict]:
     """
-    Returns the latest conversation history
+    Return recent conversation history
     in chronological order.
     """
 
@@ -63,8 +53,14 @@ def _recent_history(
 
     return [
         {
+            "id": message.id,
             "role": message.role,
             "content": message.content,
+            "created_at": (
+                message.created_at.isoformat()
+                if message.created_at
+                else None
+            ),
         }
         for message in reversed(messages)
     ]
@@ -76,7 +72,7 @@ def chat(
     db: Session = Depends(get_db),
 ):
     """
-    Main conversation endpoint.
+    Main NekoAI conversation endpoint.
     """
 
     message = request.message.strip()
@@ -88,22 +84,32 @@ def chat(
             "error": "Please enter a message.",
         }
 
-    # Save user message if important
-    auto_save_memory(db, message)
-
-    # Load recent conversation
-    history = _recent_history(db)
-
-    # Save user message
-    db.add(
-        ChatMessage(
-            role="user",
-            content=message,
-        )
+    # Load history before saving the current user message.
+    history = _recent_history(
+        db,
+        limit=20,
     )
-    db.commit()
 
-    # Build Gemini prompt
+    # Save useful information from the user message.
+    try:
+        auto_save_memory(db, message)
+    except Exception as error:
+        print(
+            f"Memory save warning: "
+            f"{type(error).__name__}: {error}"
+        )
+
+    # Save user message.
+    user_chat_message = ChatMessage(
+        role="user",
+        content=message,
+    )
+
+    db.add(user_chat_message)
+    db.commit()
+    db.refresh(user_chat_message)
+
+    # Build the full AI prompt.
     prompt = build_prompt(
         user_message=message,
         memories=format_memories(
@@ -115,34 +121,73 @@ def chat(
         history=history,
     )
 
-    # Generate AI response
     try:
         reply = generate_response(prompt)
 
+        if not reply or not reply.strip():
+            raise ValueError(
+                "Gemini returned an empty response."
+            )
+
+        reply = reply.strip()
+
     except Exception as error:
-
-        print("Gemini Error:", error)
-
-        reply = (
-            "Sorry... I couldn't reach my AI brain right now 🐱 "
-            "Please try again in a moment."
+        print(
+            f"Gemini error: "
+            f"{type(error).__name__}: {error}"
         )
 
-    # Save AI reply
-    db.add(
-        ChatMessage(
-            role="neko",
-            content=reply,
-        )
+        return {
+            "success": False,
+            "reply": (
+                "Sorry... I couldn't reach my AI brain "
+                "right now 🐱 Please try again in a moment."
+            ),
+            "error": str(error),
+        }
+
+    # Save Neko's response.
+    neko_chat_message = ChatMessage(
+        role="neko",
+        content=reply,
     )
-    db.commit()
 
-    # Save useful AI memories
-    auto_save_memory(db, reply)
+    db.add(neko_chat_message)
+    db.commit()
+    db.refresh(neko_chat_message)
+
+    # Save potentially useful information from AI response.
+    try:
+        auto_save_memory(db, reply)
+    except Exception as error:
+        print(
+            f"Memory save warning: "
+            f"{type(error).__name__}: {error}"
+        )
 
     return {
         "success": True,
         "reply": reply,
+        "user_message": {
+            "id": user_chat_message.id,
+            "role": user_chat_message.role,
+            "content": user_chat_message.content,
+            "created_at": (
+                user_chat_message.created_at.isoformat()
+                if user_chat_message.created_at
+                else None
+            ),
+        },
+        "ai_message": {
+            "id": neko_chat_message.id,
+            "role": neko_chat_message.role,
+            "content": neko_chat_message.content,
+            "created_at": (
+                neko_chat_message.created_at.isoformat()
+                if neko_chat_message.created_at
+                else None
+            ),
+        },
     }
 
 
@@ -151,7 +196,8 @@ def chat_history(
     db: Session = Depends(get_db),
 ):
     """
-    Returns recent conversation history.
+    Return the latest 100 chat messages,
+    including IDs and timestamps.
     """
 
     return _recent_history(
@@ -159,6 +205,29 @@ def chat_history(
         limit=100,
     )
 
-@router.get("/chat")
+
+@router.delete("/history")
+def clear_chat_history(
+    db: Session = Depends(get_db),
+):
+    """
+    Delete all saved chat messages.
+    """
+
+    deleted_count = db.query(ChatMessage).delete()
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Chat history cleared.",
+        "deleted_count": deleted_count,
+    }
+
+
+@router.get("/test")
 def test_chat():
-    return {"reply": "Chat endpoint working!"}
+    return {
+        "success": True,
+        "reply": "Chat router is working!",
+    }

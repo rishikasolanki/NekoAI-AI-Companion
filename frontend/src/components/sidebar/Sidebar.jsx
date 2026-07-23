@@ -9,6 +9,26 @@ const navigation = [
     icon: "🏠",
   },
   {
+    name: "Tasks",
+    path: "/tasks",
+    icon: "📋",
+  },
+  {
+    name: "Focus",
+    path: "/focus",
+    icon: "⚡",
+  },
+  {
+    name: "Alarms",
+    path: "/alarms",
+    icon: "⏰",
+  },
+  {
+    name: "Habits",
+    path: "/habits",
+    icon: "🌱",
+  },
+  {
     name: "Memories",
     path: "/memories",
     icon: "🧠",
@@ -17,11 +37,6 @@ const navigation = [
     name: "Chat",
     path: "/chat",
     icon: "💬",
-  },
-  {
-    name: "Pet",
-    path: "/pet",
-    icon: "🐱",
   },
 ];
 
@@ -40,7 +55,6 @@ export default function Sidebar() {
             end={item.path === "/"}
           >
             <span>{item.icon}</span>
-
             <span>{item.name}</span>
           </NavLink>
         ))}

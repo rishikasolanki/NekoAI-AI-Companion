@@ -1,25 +1,59 @@
-import "./StatsCard.css";
-
 export default function StatsCard({
   title,
-  value = 0,
-  icon = "📊",
+  value,
+  icon,
+  progress,
+  onClick,
 }) {
+  function handleKeyDown(event) {
+    if (
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      onClick?.();
+    }
+  }
+
   return (
-    <div
-      className="stats-card"
-      role="article"
-      aria-label={title}
+    <article
+      className="dashboard-stat-card"
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
     >
-      <div className="icon">
-        {icon}
+      <div className="stat-card-top">
+        <span className="stat-card-icon">
+          {icon}
+        </span>
+
+        <span className="stat-card-arrow">
+          →
+        </span>
       </div>
 
-      <div className="stats-content">
-        <h3>{title}</h3>
+      <strong className="stat-card-value">
+        {value}
+      </strong>
 
-        <h2>{value}</h2>
-      </div>
-    </div>
+      <span className="stat-card-label">
+        {title}
+      </span>
+
+      {typeof progress === "number" && (
+        <div className="stat-progress-track">
+          <div
+            className="stat-progress-fill"
+            style={{
+              width: `${Math.min(
+                Math.max(progress, 0),
+                100
+              )}%`,
+            }}
+          />
+        </div>
+      )}
+    </article>
   );
 }
