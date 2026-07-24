@@ -5,24 +5,39 @@ import {
 } from "react";
 
 const WALK_SPEED = 2;
+const RUN_SPEED = 5;
 const WALK_INTERVAL = 45;
 
-export default function usePetMovement() {
+/**
+ * Moves the transparent pet window across the screen.
+ *
+ * This hook no longer decides *when* to walk — that is owned
+ * entirely by usePetStateMachine. It only reacts to the locomotion
+ * `state` it's given ("walk" / "run" move, anything else stays put)
+ * and is paused while `isDragging` is true so it never fights the
+ * native OS window drag.
+ */
+export default function usePetMovement(
+  state,
+  isDragging = false
+) {
   const [direction, setDirection] =
     useState(1);
 
-  const [isWalking, setIsWalking] =
-    useState(true);
-
   const walkTimerRef = useRef(null);
-  const behaviourTimerRef = useRef(null);
-  const pauseTimerRef = useRef(null);
   const movingRef = useRef(false);
+
+  const isLocomoting =
+    !isDragging &&
+    (state === "walk" || state === "run");
+
+  const speed =
+    state === "run" ? RUN_SPEED : WALK_SPEED;
 
   useEffect(() => {
     if (
       !window.electronAPI?.movePetBy ||
-      !isWalking
+      !isLocomoting
     ) {
       return undefined;
     }
@@ -38,7 +53,7 @@ export default function usePetMovement() {
         try {
           const result =
             await window.electronAPI.movePetBy(
-              direction * WALK_SPEED,
+              direction * speed,
               0
             );
 
@@ -65,41 +80,7 @@ export default function usePetMovement() {
         walkTimerRef.current
       );
     };
-  }, [direction, isWalking]);
-
-  useEffect(() => {
-    behaviourTimerRef.current =
-      window.setInterval(() => {
-        const random = Math.random();
-
-        if (random < 0.3) {
-          setIsWalking(false);
-
-          window.clearTimeout(
-            pauseTimerRef.current
-          );
-
-          pauseTimerRef.current =
-            window.setTimeout(() => {
-              setIsWalking(true);
-            }, 1800 + Math.random() * 2800);
-        } else if (random < 0.58) {
-          setDirection((current) =>
-            current === 1 ? -1 : 1
-          );
-        }
-      }, 5000);
-
-    return () => {
-      window.clearInterval(
-        behaviourTimerRef.current
-      );
-
-      window.clearTimeout(
-        pauseTimerRef.current
-      );
-    };
-  }, []);
+  }, [direction, isLocomoting, speed]);
 
   function turnAround() {
     setDirection((current) =>
@@ -109,8 +90,6 @@ export default function usePetMovement() {
 
   return {
     direction,
-    isWalking,
-    setIsWalking,
     turnAround,
   };
 }

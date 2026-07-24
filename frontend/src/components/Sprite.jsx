@@ -1,39 +1,30 @@
 import useEmotion from "../hooks/useEmotion";
 
-const emotionFaces = {
-  idle: "🐱",
-  happy: "😺",
-  excited: "😸",
-  celebrate: "😻",
-  angry: "😾",
-  sad: "😿",
-  sleep: "😴",
-  surprised: "🙀",
-  playful: "😼",
-};
-
+/**
+ * Layered CSS/vector cat sprite.
+ *
+ * No image assets are used — body, ears (via Pet.css pseudo-elements
+ * on .pet-body), tail, four legs, eyes and mouth are all real DOM
+ * parts animated per locomotion `state` and `emotion`. If real
+ * sprite-sheet art is added later, only this file needs to change
+ * (e.g. swap the parts below for <img> frame-cycling) — nothing in
+ * the state machine, movement hook, or Electron layer depends on how
+ * the sprite is drawn.
+ */
 export default function Sprite({
+  state = "idle",
   direction = 1,
-  isWalking = false,
   isDragging = false,
 }) {
   const { emotion } = useEmotion();
-
-  const face =
-    emotionFaces[emotion] ||
-    emotionFaces.idle;
 
   return (
     <div
       className={[
         "pet-sprite",
-        isWalking
-          ? "pet-walking"
-          : "pet-idle",
-        isDragging
-          ? "pet-dragging"
-          : "",
-        `pet-${emotion}`,
+        `pet-state-${state}`,
+        isDragging ? "pet-dragging" : "",
+        `pet-emotion-${emotion}`,
       ]
         .filter(Boolean)
         .join(" ")}
@@ -43,10 +34,17 @@ export default function Sprite({
     >
       <div className="pet-shadow" />
 
-      <div className="pet-body">
-        <span>{face}</span>
+      <div className="pet-tail" />
 
-        {emotion === "sleep" && (
+      <div className="pet-leg pet-leg-back-l" />
+      <div className="pet-leg pet-leg-back-r" />
+
+      <div className="pet-body">
+        <div className="pet-eye pet-eye-left" />
+        <div className="pet-eye pet-eye-right" />
+        <div className="pet-mouth" />
+
+        {state === "sleep" && (
           <div className="pet-effect">
             Zzz
           </div>
@@ -64,6 +62,9 @@ export default function Sprite({
           </div>
         )}
       </div>
+
+      <div className="pet-leg pet-leg-front-l" />
+      <div className="pet-leg pet-leg-front-r" />
     </div>
   );
 }

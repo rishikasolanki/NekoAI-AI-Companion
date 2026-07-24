@@ -7,6 +7,7 @@ import {
 import Sprite from "./Sprite";
 import useEmotion from "../hooks/useEmotion";
 import usePetMovement from "../hooks/usePetMovement";
+import usePetStateMachine from "../hooks/usePetStateMachine";
 
 import "./Pet.css";
 
@@ -20,22 +21,24 @@ const randomMessages = [
   "Do not make me use the sad eyes 🥺",
 ];
 
-const emotions = [
-  "idle",
-  "happy",
-  "playful",
-  "sleep",
-  "sad",
-  "excited",
-];
+// Worst case, if a native window drag never fires a mouseup (e.g. the
+// OS swallows it), this clears the dragging pose on its own so the
+// pet can never get stuck in a "being dragged" state.
+const DRAG_FAILSAFE_MS = 4000;
 
 export default function Pet() {
   const {
+    state,
+    forceState,
+  } = usePetStateMachine("idle");
+
+  const [isDragging, setIsDragging] =
+    useState(false);
+
+  const {
     direction,
-    isWalking,
-    setIsWalking,
     turnAround,
-  } = usePetMovement();
+  } = usePetMovement(state, isDragging);
 
   const {
     emotion,
@@ -58,6 +61,7 @@ export default function Pet() {
   const speechTimerRef = useRef(null);
   const emotionTimerRef = useRef(null);
   const clickTimerRef = useRef(null);
+  const dragFailsafeRef = useRef(null);
 
   const level =
     Math.floor(xp / 100) + 1;
@@ -71,6 +75,12 @@ export default function Pet() {
     );
   }, [xp]);
 
+  // Alarm/task/habit features already send these IPC events — keep
+  // listening exactly as before. Only "sleep"/"sad" now interrupt the
+  // pet's current locomotion (mirrors the old behaviour of pausing
+  // movement for those two); other emotions (e.g. the alarm's
+  // "angry", or "celebrate" on dismiss) just play on top of whatever
+  // the pet is already doing, which reads as less jarring.
   useEffect(() => {
     const removeMessageListener =
       window.electronAPI?.onPetMessage?.(
@@ -85,11 +95,11 @@ export default function Pet() {
         (newEmotion) => {
           setEmotion(newEmotion);
 
-          setIsWalking(
-            !["sleep", "sad"].includes(
-              newEmotion
-            )
-          );
+          if (newEmotion === "sleep") {
+            forceState("sleep", 6000);
+          } else if (newEmotion === "sad") {
+            forceState("sit", 5000);
+          }
         }
       );
 
@@ -97,28 +107,18 @@ export default function Pet() {
       removeMessageListener?.();
       removeEmotionListener?.();
     };
-  }, [setEmotion, setIsWalking]);
+  }, [setEmotion, forceState]);
 
+  // Lightweight personality timer: occasional speech bubbles and a
+  // brief happy-emotion flash. Locomotion (idle/walk/run/sit/sleep)
+  // is owned entirely by usePetStateMachine now, so this no longer
+  // touches it — previously this timer and a second one inside
+  // usePetMovement both randomized walking independently, which
+  // could fight each other.
   useEffect(() => {
-    const behaviourTimer =
+    const personalityTimer =
       window.setInterval(() => {
-        const nextEmotion =
-          emotions[
-            Math.floor(
-              Math.random() *
-                emotions.length
-            )
-          ];
-
-        setEmotion(nextEmotion);
-
-        setIsWalking(
-          !["sleep", "sad", "idle"].includes(
-            nextEmotion
-          )
-        );
-
-        if (Math.random() < 0.45) {
+        if (Math.random() < 0.4) {
           const nextMessage =
             randomMessages[
               Math.floor(
@@ -130,30 +130,63 @@ export default function Pet() {
           showMessage(nextMessage);
         }
 
-        window.clearTimeout(
-          emotionTimerRef.current
-        );
+        if (Math.random() < 0.2) {
+          setEmotion("happy");
 
-        emotionTimerRef.current =
-          window.setTimeout(() => {
-            setEmotion("idle");
-            setIsWalking(true);
-          }, 4500);
-      }, 12000);
+          window.clearTimeout(
+            emotionTimerRef.current
+          );
+
+          emotionTimerRef.current =
+            window.setTimeout(() => {
+              setEmotion("idle");
+            }, 1600);
+        }
+      }, 15000);
 
     return () => {
       window.clearInterval(
-        behaviourTimer
+        personalityTimer
       );
 
       window.clearTimeout(
         emotionTimerRef.current
       );
     };
-  }, [
-    setEmotion,
-    setIsWalking,
-  ]);
+  }, [setEmotion]);
+
+  useEffect(() => {
+    function handleWindowMouseUp() {
+      endDrag();
+    }
+
+    window.addEventListener(
+      "mouseup",
+      handleWindowMouseUp
+    );
+
+    window.addEventListener(
+      "blur",
+      handleWindowMouseUp
+    );
+
+    return () => {
+      window.removeEventListener(
+        "mouseup",
+        handleWindowMouseUp
+      );
+
+      window.removeEventListener(
+        "blur",
+        handleWindowMouseUp
+      );
+
+      window.clearTimeout(
+        dragFailsafeRef.current
+      );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function showMessage(text) {
     window.clearTimeout(
@@ -259,7 +292,7 @@ export default function Pet() {
         : "happy";
 
     setEmotion(nextEmotion);
-    setIsWalking(false);
+    forceState("sit", 2000);
 
     rewardXp(5);
     playMeow("happy");
@@ -270,10 +303,14 @@ export default function Pet() {
         : "Purrrrr... tickles!"
     );
 
-    window.setTimeout(() => {
-      setEmotion("idle");
-      setIsWalking(true);
-    }, 2000);
+    window.clearTimeout(
+      emotionTimerRef.current
+    );
+
+    emotionTimerRef.current =
+      window.setTimeout(() => {
+        setEmotion("idle");
+      }, 2000);
   }
 
   function handleClick(event) {
@@ -299,7 +336,7 @@ export default function Pet() {
     );
 
     setEmotion("excited");
-    setIsWalking(false);
+    forceState("sit", 1800);
 
     rewardXp(15);
     playMeow("happy");
@@ -310,10 +347,14 @@ export default function Pet() {
 
     window.electronAPI?.openDashboard();
 
-    window.setTimeout(() => {
-      setEmotion("idle");
-      setIsWalking(true);
-    }, 1800);
+    window.clearTimeout(
+      emotionTimerRef.current
+    );
+
+    emotionTimerRef.current =
+      window.setTimeout(() => {
+        setEmotion("idle");
+      }, 1800);
   }
 
   function handleContextMenu(event) {
@@ -323,13 +364,50 @@ export default function Pet() {
     turnAround();
     setEmotion("surprised");
 
+    window.clearTimeout(
+      emotionTimerRef.current
+    );
+
+    emotionTimerRef.current =
+      window.setTimeout(() => {
+        setEmotion("idle");
+      }, 1500);
+
     showMessage(
       "Whoa! Secret turnaround unlocked 🙀"
     );
+  }
 
-    window.setTimeout(() => {
-      setEmotion("idle");
-    }, 1500);
+  function startDrag() {
+    setIsDragging(true);
+
+    // Pause autonomous locomotion while the OS drags the window;
+    // resumes on its own after the failsafe if nothing else clears
+    // it first.
+    forceState(state, DRAG_FAILSAFE_MS + 500);
+
+    window.clearTimeout(
+      dragFailsafeRef.current
+    );
+
+    dragFailsafeRef.current =
+      window.setTimeout(() => {
+        endDrag();
+      }, DRAG_FAILSAFE_MS);
+  }
+
+  function endDrag() {
+    window.clearTimeout(
+      dragFailsafeRef.current
+    );
+
+    setIsDragging((wasDragging) => {
+      if (wasDragging) {
+        forceState("idle", 300);
+      }
+
+      return false;
+    });
   }
 
   return (
@@ -363,11 +441,12 @@ export default function Pet() {
       <div
         className="pet-drag-area"
         title="Drag Neko"
+        onMouseDown={startDrag}
       >
         <Sprite
+          state={state}
           direction={direction}
-          isWalking={isWalking}
-          isDragging={false}
+          isDragging={isDragging}
         />
       </div>
 
