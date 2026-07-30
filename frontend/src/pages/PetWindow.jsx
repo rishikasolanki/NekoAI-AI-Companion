@@ -32,7 +32,7 @@ export default function PetWindow() {
       const shouldBeInteractive =
         Boolean(
           element?.closest(
-            ".pet-drag-area, .pet-face-button"
+            ".pet-drag-area, .pet-face-button, .pet-bubble-actions"
           )
         );
 

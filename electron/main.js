@@ -828,6 +828,10 @@ ipcMain.on("pet-hide", () => {
   petWindow?.hide();
 });
 
+ipcMain.on("pet-show", () => {
+  openPetWindow();
+});
+
 ipcMain.on(
   "pet-save-position",
   savePetBounds

@@ -5,26 +5,36 @@ import {
 } from "react";
 
 import Sprite from "./Sprite";
+import PetBubble from "./PetBubble";
 import useEmotion from "../hooks/useEmotion";
+import usePetLifecycle, {
+  PET_LIFECYCLE_PHASES,
+} from "../hooks/usePetLifecycle";
 import usePetMovement from "../hooks/usePetMovement";
 import usePetStateMachine from "../hooks/usePetStateMachine";
 
 import "./Pet.css";
 
-const randomMessages = [
+// Movement threshold: pointer must travel more than this many pixels
+// before we call it a drag instead of a click.
+const DRAG_THRESHOLD_PX = 6;
+
+// How far past the screen edge (in px) before we treat the drag as
+// "intentionally off-screen" and snooze the pet.
+const OFFSCREEN_SNOOZE_THRESHOLD_PX = 60;
+
+// Worst-case failsafe: if the OS swallows pointerup (e.g. on a native
+// drag), clear the dragging pose automatically.
+const DRAG_FAILSAFE_MS = 4000;
+
+const randomMotivations = [
   "Meow! Ready for one small win? 🐾",
   "No side quests. Lock in.",
   "Tiny progress still counts.",
   "I am watching supportively 😼",
-  "Have you finished your important task?",
   "Hydration check, bestie 💧",
   "Do not make me use the sad eyes 🥺",
 ];
-
-// Worst case, if a native window drag never fires a mouseup (e.g. the
-// OS swallows it), this clears the dragging pose on its own so the
-// pet can never get stuck in a "being dragged" state.
-const DRAG_FAILSAFE_MS = 4000;
 
 export default function Pet() {
   const {
@@ -45,6 +55,43 @@ export default function Pet() {
     setEmotion,
   } = useEmotion();
 
+  // Lifecycle hook — single WebSocket connection, reminder state machine.
+  const {
+    phase,
+    reminder,
+    respond,
+    snooze,
+  } = usePetLifecycle();
+
+  // When a lifecycle reminder arrives, mirror its emotion onto the
+  // sprite. Reset to "idle" when the reminder is gone.
+  useEffect(() => {
+    if (reminder?.emotion) {
+      setEmotion(reminder.emotion);
+    } else if (
+      phase === PET_LIFECYCLE_PHASES.IDLE ||
+      phase === PET_LIFECYCLE_PHASES.HIDDEN
+    ) {
+      setEmotion("idle");
+    }
+  }, [reminder, phase, setEmotion]);
+
+  // Keep locomotion in sync with lifecycle phase.
+  useEffect(() => {
+    if (
+      phase === PET_LIFECYCLE_PHASES.ENTERING ||
+      phase === PET_LIFECYCLE_PHASES.LEAVING
+    ) {
+      forceState("walk", 1500);
+    } else if (
+      phase === PET_LIFECYCLE_PHASES.TALKING ||
+      phase === PET_LIFECYCLE_PHASES.WAITING ||
+      phase === PET_LIFECYCLE_PHASES.REACTING
+    ) {
+      forceState("sit", 3500);
+    }
+  }, [phase, forceState]);
+
   const [message, setMessage] =
     useState("");
 
@@ -63,9 +110,11 @@ export default function Pet() {
   const clickTimerRef = useRef(null);
   const dragFailsafeRef = useRef(null);
 
-  const level =
-    Math.floor(xp / 100) + 1;
+  // Pointer-drag tracking.
+  const pointerDownRef = useRef(null); // { x, y, pointerId, offsetX, offsetY }
+  const isDraggingRef = useRef(false); // mirrors isDragging without stale closure
 
+  const level = Math.floor(xp / 100) + 1;
   const levelProgress = xp % 100;
 
   useEffect(() => {
@@ -75,12 +124,7 @@ export default function Pet() {
     );
   }, [xp]);
 
-  // Alarm/task/habit features already send these IPC events — keep
-  // listening exactly as before. Only "sleep"/"sad" now interrupt the
-  // pet's current locomotion (mirrors the old behaviour of pausing
-  // movement for those two); other emotions (e.g. the alarm's
-  // "angry", or "celebrate" on dismiss) just play on top of whatever
-  // the pet is already doing, which reads as less jarring.
+  // IPC: onPetEmotion / onPetMessage listeners (alarm module, etc.)
   useEffect(() => {
     const removeMessageListener =
       window.electronAPI?.onPetMessage?.(
@@ -109,21 +153,25 @@ export default function Pet() {
     };
   }, [setEmotion, forceState]);
 
-  // Lightweight personality timer: occasional speech bubbles and a
-  // brief happy-emotion flash. Locomotion (idle/walk/run/sit/sleep)
-  // is owned entirely by usePetStateMachine now, so this no longer
-  // touches it — previously this timer and a second one inside
-  // usePetMovement both randomized walking independently, which
-  // could fight each other.
+  // Personality timer: occasional motivational messages when there is
+  // NO active lifecycle reminder. Avoids polluting the reminder bubble.
   useEffect(() => {
     const personalityTimer =
       window.setInterval(() => {
-        if (Math.random() < 0.4) {
+        // Only show random messages when the pet is idle (not in a
+        // lifecycle reminder flow).
+        if (
+          phase !== PET_LIFECYCLE_PHASES.IDLE
+        ) {
+          return;
+        }
+
+        if (Math.random() < 0.35) {
           const nextMessage =
-            randomMessages[
+            randomMotivations[
               Math.floor(
                 Math.random() *
-                  randomMessages.length
+                  randomMotivations.length
               )
             ];
 
@@ -153,32 +201,41 @@ export default function Pet() {
         emotionTimerRef.current
       );
     };
-  }, [setEmotion]);
+  }, [phase, setEmotion]);
 
+  // Global pointerup / blur to end drag safely.
   useEffect(() => {
-    function handleWindowMouseUp() {
-      endDrag();
+    function handleGlobalPointerUp(e) {
+      if (isDraggingRef.current) {
+        endDrag(e);
+      }
+    }
+
+    function handleBlur() {
+      if (isDraggingRef.current) {
+        endDrag(null);
+      }
     }
 
     window.addEventListener(
-      "mouseup",
-      handleWindowMouseUp
+      "pointerup",
+      handleGlobalPointerUp
     );
 
     window.addEventListener(
       "blur",
-      handleWindowMouseUp
+      handleBlur
     );
 
     return () => {
       window.removeEventListener(
-        "mouseup",
-        handleWindowMouseUp
+        "pointerup",
+        handleGlobalPointerUp
       );
 
       window.removeEventListener(
         "blur",
-        handleWindowMouseUp
+        handleBlur
       );
 
       window.clearTimeout(
@@ -378,87 +435,244 @@ export default function Pet() {
     );
   }
 
-  function startDrag() {
-    setIsDragging(true);
+  // ─── Pointer-event dragging ──────────────────────────────────────
+  // We use pointerdown/pointermove/pointerup (instead of mousedown) so
+  // the drag also works on touch / pen and we can capture the pointer
+  // to receive events outside the element.
 
-    // Pause autonomous locomotion while the OS drags the window;
-    // resumes on its own after the failsafe if nothing else clears
-    // it first.
-    forceState(state, DRAG_FAILSAFE_MS + 500);
+  function handlePointerDown(event) {
+    // Only left-button / primary touch; ignore right-click etc.
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
 
-    window.clearTimeout(
-      dragFailsafeRef.current
-    );
+    pointerDownRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
 
-    dragFailsafeRef.current =
-      window.setTimeout(() => {
-        endDrag();
-      }, DRAG_FAILSAFE_MS);
+    // Capture pointer so we keep receiving events even if the cursor
+    // leaves the element.
+    try {
+      event.currentTarget.setPointerCapture(
+        event.pointerId
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
-  function endDrag() {
+  function handlePointerMove(event) {
+    const pd = pointerDownRef.current;
+
+    if (!pd || pd.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const dx = event.clientX - pd.startX;
+    const dy = event.clientY - pd.startY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (!isDraggingRef.current) {
+      if (dist < DRAG_THRESHOLD_PX) {
+        return;
+      }
+
+      // Crossed the threshold — this is a drag.
+      isDraggingRef.current = true;
+      setIsDragging(true);
+
+      forceState(state, DRAG_FAILSAFE_MS + 500);
+
+      window.clearTimeout(
+        dragFailsafeRef.current
+      );
+
+      dragFailsafeRef.current =
+        window.setTimeout(() => {
+          if (isDraggingRef.current) {
+            endDrag(null);
+          }
+        }, DRAG_FAILSAFE_MS);
+
+      // Tell Electron to start the native window-drag interval,
+      // passing the cursor offset within the window so the pet
+      // doesn't jump.
+      window.electronAPI?.startPetDrag({
+        x: pd.startX,
+        y: pd.startY,
+      });
+    }
+  }
+
+  async function endDrag(event) {
     window.clearTimeout(
       dragFailsafeRef.current
     );
+
+    if (!isDraggingRef.current) {
+      pointerDownRef.current = null;
+      return;
+    }
+
+    isDraggingRef.current = false;
+    pointerDownRef.current = null;
+
+    window.electronAPI?.stopPetDrag();
+
+    // Check whether the user intentionally dragged the pet off-screen.
+    // Electron clamps the window at screen edges so windowBounds alone
+    // won't show off-screen values; instead we compare the final cursor
+    // position (from the last pointer event) against the work area.
+    try {
+      const info =
+        await window.electronAPI?.getPetScreenInfo?.();
+
+      if (info && event) {
+        const { workArea } = info;
+
+        // clientX/clientY are in the pet window's coordinate system
+        // (0,0 = top-left of pet window). Convert to screen coords by
+        // adding windowBounds position.
+        const { windowBounds } = info;
+
+        const screenCursorX =
+          windowBounds.x + event.clientX;
+
+        const screenCursorY =
+          windowBounds.y + event.clientY;
+
+        const offLeft =
+          workArea.x - screenCursorX;
+
+        const offRight =
+          screenCursorX -
+          (workArea.x + workArea.width);
+
+        const offTop =
+          workArea.y - screenCursorY;
+
+        const offBottom =
+          screenCursorY -
+          (workArea.y + workArea.height);
+
+        const maxOff = Math.max(
+          offLeft,
+          offRight,
+          offTop,
+          offBottom
+        );
+
+        if (maxOff > OFFSCREEN_SNOOZE_THRESHOLD_PX) {
+          // The pet was dragged off-screen — snooze.
+          snooze();
+          setIsDragging(false);
+          return;
+        }
+      }
+    } catch {
+      /* screen info unavailable — just end drag normally */
+    }
 
     setIsDragging((wasDragging) => {
       if (wasDragging) {
         forceState("idle", 300);
       }
-
       return false;
     });
   }
 
+  // The bubble shown above the pet during lifecycle talk/wait phases.
+  // Rendered inside the same wrapper so it moves with the window.
+  const showLifecycleBubble =
+    (phase === PET_LIFECYCLE_PHASES.TALKING ||
+      phase === PET_LIFECYCLE_PHASES.WAITING) &&
+    reminder?.message;
+
+  // The simple personality message bubble (shown when idle).
+  const showSimpleBubble =
+    !showLifecycleBubble && message;
+
   return (
     <div className="desktop-pet">
-      {message && (
-        <div className="pet-speech-bubble">
-          <p>{message}</p>
-          <span />
+      {/* Shared wrapper so bubble + sprite move as one unit */}
+      <div
+        className={[
+          "pet-wrapper",
+          `pet-lifecycle-${phase}`,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {/* Lifecycle reminder bubble (task/emotion-aware) */}
+        {showLifecycleBubble && (
+          <div className="pet-bubble-above">
+            <PetBubble
+              lifecyclePhase={phase}
+              message={reminder.message}
+              actions={reminder.actions}
+              onAction={respond}
+            />
+          </div>
+        )}
+
+        {/* Simple personality message bubble */}
+        {showSimpleBubble && (
+          <div className="pet-speech-bubble pet-bubble-above-simple">
+            <p>{message}</p>
+            <span />
+          </div>
+        )}
+
+        <div className="pet-level-card">
+          <span>Lv. {level}</span>
+
+          <div className="pet-xp-track">
+            <div
+              className="pet-xp-fill"
+              style={{
+                width: `${levelProgress}%`,
+              }}
+            />
+          </div>
         </div>
-      )}
 
-      <div className="pet-level-card">
-        <span>Lv. {level}</span>
+        {showXp && (
+          <div className="pet-xp-popup">
+            +5 XP
+          </div>
+        )}
 
-        <div className="pet-xp-track">
-          <div
-            className="pet-xp-fill"
-            style={{
-              width: `${levelProgress}%`,
-            }}
+        {/* Drag area — captures pointer events to move the window */}
+        <div
+          className="pet-drag-area"
+          title="Drag Neko"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+        >
+          <Sprite
+            state={state}
+            direction={direction}
+            isDragging={isDragging}
+            talking={
+              phase === PET_LIFECYCLE_PHASES.TALKING ||
+              phase === PET_LIFECYCLE_PHASES.WAITING
+            }
           />
         </div>
-      </div>
 
-      {showXp && (
-        <div className="pet-xp-popup">
-          +5 XP
-        </div>
-      )}
-
-      <div
-        className="pet-drag-area"
-        title="Drag Neko"
-        onMouseDown={startDrag}
-      >
-        <Sprite
-          state={state}
-          direction={direction}
-          isDragging={isDragging}
+        <button
+          type="button"
+          className="pet-face-button"
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+          onContextMenu={handleContextMenu}
+          aria-label="Tickle Neko"
+          title="Click to tickle · Double-click to open NekoAI"
         />
       </div>
-
-      <button
-        type="button"
-        className="pet-face-button"
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        onContextMenu={handleContextMenu}
-        aria-label="Tickle Neko"
-        title="Click to tickle · Double-click to open NekoAI"
-      />
     </div>
   );
 }

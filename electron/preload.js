@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.send("pet-hide");
     },
 
+    showPet() {
+      ipcRenderer.send("pet-show");
+    },
+
     savePetPosition() {
       ipcRenderer.send(
         "pet-save-position"

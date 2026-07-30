@@ -15,6 +15,7 @@ export default function Sprite({
   state = "idle",
   direction = 1,
   isDragging = false,
+  talking = false,
 }) {
   const { emotion } = useEmotion();
 
@@ -24,6 +25,7 @@ export default function Sprite({
         "pet-sprite",
         `pet-state-${state}`,
         isDragging ? "pet-dragging" : "",
+        talking ? "pet-talking" : "",
         `pet-emotion-${emotion}`,
       ]
         .filter(Boolean)

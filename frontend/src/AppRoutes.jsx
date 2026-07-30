@@ -15,6 +15,7 @@ import Habits from "./pages/Habits";
 import Chat from "./pages/Chat/Chat";
 import MemoryPage from "./pages/MemoryPage";
 import PetWindow from "./pages/PetWindow";
+import PetTest from "./pages/PetTest";
 
 export default function AppRoutes() {
   return (
@@ -53,6 +54,11 @@ export default function AppRoutes() {
         <Route
           path="memories"
           element={<MemoryPage />}
+        />
+
+        <Route
+          path="pet-test"
+          element={<PetTest />}
         />
       </Route>
 
